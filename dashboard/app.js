@@ -44,6 +44,71 @@
     return { fdv: Math.round(fdv), expected: Math.round(fdv * row.launch_probability) };
   }
 
+  // The board as a spreadsheet: the pre-token rows the table is showing (the
+  // current filter and sort), with the four model legs beside the expected
+  // value, so every row recomputes from the file alone. A '#' line up top
+  // records which snapshot and model the export came from.
+  function csvCell(v) {
+    if (v === null || v === undefined) return '';
+    var s = String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function boardCsv() {
+    var head = ['rank', 'name', 'category', 'chains', 'tvl_usd', 'change_7d_pct', 'age_days', 'category_multiple', 'growth_multiplier', 'maturity_multiplier', 'implied_fdv_usd', 'launch_probability', 'expected_value_usd', 'scope'];
+    var list = sortedRows(rows());
+    var lines = ['# token radar ' + DATA.model_version + ', snapshot ' + DATA.as_of + ', ' + list.length + ' rows'];
+    lines.push(head.join(','));
+    list.forEach(function (r) {
+      lines.push([
+        r.rank, r.name, r.category || 'Other', (r.chains || []).join(' / '),
+        r.tvl_usd, r.change_7d, r.age_days,
+        r.category_multiple, r.growth_multiplier, r.maturity_multiplier,
+        r.implied_fdv_usd, r.launch_probability, r.implied_value_usd,
+        isWatchlist(r) ? 'watchlist' : 'early'
+      ].map(csvCell).join(','));
+    });
+    return lines.join('\n') + '\n';
+  }
+  function downloadCsv() {
+    var blob = new Blob([boardCsv()], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'token-radar-' + DATA.as_of + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  // Copy the page's address (the hash carries the whole filter state, so the
+  // link reopens exactly this view) and tell the button it worked.
+  function copyLink(btn) {
+    var url = window.location.href;
+    function done() {
+      var old = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = old; }, 1500);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { fallbackCopy(url); done(); });
+    } else {
+      fallbackCopy(url);
+      done();
+    }
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* clipboard unavailable */ }
+    document.body.removeChild(ta);
+  }
+
   function el(tag, attrs) {
     var node = document.createElement(tag);
     if (attrs) {
@@ -254,6 +319,11 @@
       el('div', { class: 'field' }, el('label', { for: 'mintvl', text: 'Minimum TVL' }), tvlSelect),
       el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Scope' }), el('div', { class: 'tabs' }, scopeBtn('all', 'All'), scopeBtn('watchlist', 'Watchlist'), scopeBtn('early', 'Early'))),
       el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Token status' }), el('div', { class: 'tabs' }, tabBtn('pre-token', 'Pre-token'), tabBtn('live', 'Live token'))),
+      el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Take it with you' }),
+        el('div', { class: 'actions' },
+          el('button', { class: 'button', type: 'button', text: 'Download board CSV', title: 'The filtered board, with the model legs, as a spreadsheet file', onclick: function () { downloadCsv(); } }),
+          el('button', { class: 'button', type: 'button', text: 'Copy link', title: 'Copy this view (the filters live in the address)', onclick: function (e) { copyLink(e.target); } })
+        )),
       el('span', { class: 'count', text: state.tab === 'pre-token' ? rows().length + ' rows shown' : DATA.live.length + ' live-token protocols' })
     );
   }
@@ -446,5 +516,14 @@
   window.addEventListener('hashchange', function () { readHash(); render(); });
   window.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && dialog.open) dialog.close();
+    // 'd' downloads the board, 'l' copies its link; never while typing in a
+    // field, and never with a modifier held (those belong to the browser).
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'd') downloadCsv();
+    if (e.key === 'l') {
+      var btns = document.querySelectorAll('.actions .button');
+      if (btns.length > 1) copyLink(btns[1]);
+    }
   });
 })();

@@ -119,6 +119,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .empty p { color: var(--muted); }
 .button { min-height: 36px; padding: 0 var(--step-4); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.actions { display: flex; gap: var(--step-2); }
+.actions .button { white-space: nowrap; }
 
 .detail {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw); z-index: 10;
