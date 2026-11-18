@@ -58,6 +58,7 @@
     var head = ['rank', 'name', 'category', 'chains', 'tvl_usd', 'change_7d_pct', 'age_days', 'category_multiple', 'growth_multiplier', 'maturity_multiplier', 'implied_fdv_usd', 'launch_probability', 'expected_value_usd', 'scope'];
     var list = sortedRows(rows());
     var lines = ['# token radar ' + DATA.model_version + ', snapshot ' + DATA.as_of + ', ' + list.length + ' rows'];
+    lines.push('# expected = tvl_usd x category multiple x growth multiplier x maturity multiplier x launch probability');
     lines.push(head.join(','));
     list.forEach(function (r) {
       lines.push([
@@ -70,16 +71,38 @@
     });
     return lines.join('\n') + '\n';
   }
-  function downloadCsv() {
-    var blob = new Blob([boardCsv()], { type: 'text/csv;charset=utf-8' });
+  // The live-token set as a spreadsheet: the same snapshot, but market caps
+  // are facts, not a model, so the columns are the reported numbers only.
+  function liveCsv() {
+    var head = ['name', 'category', 'chains', 'tvl_usd', 'change_7d_pct', 'mcap_usd'];
+    var lines = ['# token radar ' + DATA.model_version + ', snapshot ' + DATA.as_of + ', ' + DATA.live.length + ' live-token protocols'];
+    lines.push('# market caps are reported, never ranked: they calibrate the multiples above');
+    lines.push(head.join(','));
+    DATA.live.forEach(function (r) {
+      lines.push([
+        r.name, r.category || 'Other', (r.chains || []).join(' / '),
+        r.tvl_usd, r.change_7d, r.mcap_usd
+      ].map(csvCell).join(','));
+    });
+    return lines.join('\n') + '\n';
+  }
+  function downloadCsv(btn) {
+    var live = state.tab === 'live';
+    var text = live ? liveCsv() : boardCsv();
+    var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'token-radar-' + DATA.as_of + '.csv';
+    a.download = 'token-radar-' + DATA.as_of + (live ? '-live' : '') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    if (btn) {
+      var old = btn.textContent;
+      btn.textContent = 'Saved';
+      setTimeout(function () { btn.textContent = old; }, 1500);
+    }
   }
   // Copy the page's address (the hash carries the whole filter state, so the
   // link reopens exactly this view) and tell the button it worked.
@@ -321,9 +344,10 @@
       el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Token status' }), el('div', { class: 'tabs' }, tabBtn('pre-token', 'Pre-token'), tabBtn('live', 'Live token'))),
       el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Take it with you' }),
         el('div', { class: 'actions' },
-          el('button', { class: 'button', type: 'button', text: 'Download board CSV', title: 'The filtered board, with the model legs, as a spreadsheet file', onclick: function () { downloadCsv(); } }),
+          el('button', { class: 'button', type: 'button', text: 'Download board CSV', title: 'The filtered board, with the model legs, as a spreadsheet file', onclick: function (e) { downloadCsv(e.target); } }),
           el('button', { class: 'button', type: 'button', text: 'Copy link', title: 'Copy this view (the filters live in the address)', onclick: function (e) { copyLink(e.target); } })
-        )),
+        ),
+        el('span', { class: 'sub', text: 'Keys: d downloads the CSV, l copies the link' })),
       el('span', { class: 'count', text: state.tab === 'pre-token' ? rows().length + ' rows shown' : DATA.live.length + ' live-token protocols' })
     );
   }
